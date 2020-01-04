@@ -10,24 +10,21 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import configparser
 import os
-
-from six.moves import configparser
 
 from virtualbmc import utils
 
 __all__ = ['get_config']
 
 _CONFIG_FILE_PATHS = (
+    os.environ.get('VIRTUALBMC_CONFIG', ''),
     os.path.join(os.path.expanduser('~'), '.vbmc', 'virtualbmc.conf'),
     '/etc/virtualbmc/virtualbmc.conf')
 
+CONFIG_FILE = next((x for x in _CONFIG_FILE_PATHS if os.path.exists(x)), '')
+
 CONFIG = None
-CONFIG_FILE = ''
-for config in _CONFIG_FILE_PATHS:
-    if os.path.exists(config):
-        CONFIG_FILE = config
-        break
 
 
 class VirtualBMCConfig(object):
@@ -35,7 +32,15 @@ class VirtualBMCConfig(object):
     DEFAULTS = {
         'default': {
             'show_passwords': 'false',
-            'config_dir': os.path.join(os.path.expanduser('~'), '.vbmc'),
+            'config_dir': os.path.join(
+                os.path.expanduser('~'), '.vbmc'
+            ),
+            'pid_file': os.path.join(
+                os.path.expanduser('~'), '.vbmc', 'master.pid'
+            ),
+            'server_port': 50891,
+            'server_response_timeout': 5000,  # milliseconds
+            'server_spawn_wait': 3000,  # milliseconds
         },
         'log': {
             'logfile': None,
@@ -69,6 +74,15 @@ class VirtualBMCConfig(object):
 
         self._conf_dict['default']['show_passwords'] = utils.str2bool(
             self._conf_dict['default']['show_passwords'])
+
+        self._conf_dict['default']['server_port'] = int(
+            self._conf_dict['default']['server_port'])
+
+        self._conf_dict['default']['server_spawn_wait'] = int(
+            self._conf_dict['default']['server_spawn_wait'])
+
+        self._conf_dict['default']['server_response_timeout'] = int(
+            self._conf_dict['default']['server_response_timeout'])
 
         self._conf_dict['ipmi']['session_timeout'] = int(
             self._conf_dict['ipmi']['session_timeout'])

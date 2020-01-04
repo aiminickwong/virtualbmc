@@ -16,6 +16,7 @@
 import libvirt
 import mock
 
+from virtualbmc import exception
 from virtualbmc.tests.unit import base
 from virtualbmc.tests.unit import utils as test_utils
 from virtualbmc import utils
@@ -29,6 +30,14 @@ DOMAIN_XML_TEMPLATE = """\
     <bootmenu enable='no'/>
     <bios useserial='yes'/>
   </os>
+  <devices>
+    <disk type='block' device='disk'>
+      <boot order='2'/>
+    </disk>
+    <interface type='network'>
+      <boot order='1'/>
+    </interface>
+  </devices>
 </domain>
 """
 
@@ -82,6 +91,7 @@ class VirtualBMCTestCase(base.TestCase):
             expected = ('<boot dev="%s" />' %
                         vbmc.SET_BOOT_DEVICES_MAP[boot_device])
             self.assertIn(expected, str(conn.defineXML.call_args))
+            self.assertEqual(1, str(conn.defineXML.call_args).count('<boot '))
             self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
 
             # reset mocks for the next iteraction
@@ -92,7 +102,7 @@ class VirtualBMCTestCase(base.TestCase):
                                    mock_libvirt_open):
         mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
         ret = self.vbmc.set_boot_device('network')
-        self.assertEqual(0xd5, ret)
+        self.assertEqual(0xc0, ret)
         self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
 
     def test_set_boot_device_unkown_device_error(self, mock_libvirt_domain,
@@ -123,8 +133,7 @@ class VirtualBMCTestCase(base.TestCase):
     def test_get_power_state_error(self, mock_libvirt_domain,
                                    mock_libvirt_open):
         mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
-        ret = self.vbmc.get_power_state()
-        self.assertEqual(0xd5, ret)
+        self.assertRaises(exception.VirtualBMCError, self.vbmc.get_power_state)
         self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open,
                                    readonly=True)
 
@@ -148,7 +157,7 @@ class VirtualBMCTestCase(base.TestCase):
     def test_pulse_diag_error(self, mock_libvirt_domain, mock_libvirt_open):
         mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
         ret = self.vbmc.pulse_diag()
-        self.assertEqual(0xd5, ret)
+        self.assertEqual(0xC0, ret)
         mock_libvirt_domain.return_value.injectNMI.assert_not_called()
         self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
 
@@ -172,8 +181,32 @@ class VirtualBMCTestCase(base.TestCase):
     def test_power_off_error(self, mock_libvirt_domain, mock_libvirt_open):
         mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
         ret = self.vbmc.power_off()
-        self.assertEqual(0xd5, ret)
+        self.assertEqual(0xC0, ret)
         mock_libvirt_domain.return_value.destroy.assert_not_called()
+        self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
+
+    def test_power_reset_is_on(self, mock_libvirt_domain, mock_libvirt_open):
+        domain = mock_libvirt_domain.return_value
+        domain.isActive.return_value = True
+        self.vbmc.power_reset()
+
+        domain.reset.assert_called_once_with()
+        self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
+
+    def test_power_reset_is_off(self, mock_libvirt_domain, mock_libvirt_open):
+        domain = mock_libvirt_domain.return_value
+        domain.isActive.return_value = False
+        self.vbmc.power_reset()
+
+        # power is already off, assert reset() wasn't invoked
+        domain.reset.assert_not_called()
+        self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
+
+    def test_power_reset_error(self, mock_libvirt_domain, mock_libvirt_open):
+        mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
+        ret = self.vbmc.power_reset()
+        self.assertEqual(0xC0, ret)
+        mock_libvirt_domain.return_value.reset.assert_not_called()
         self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
 
     def test_power_shutdown_is_on(self, mock_libvirt_domain,
@@ -199,7 +232,7 @@ class VirtualBMCTestCase(base.TestCase):
                                   mock_libvirt_open):
         mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
         ret = self.vbmc.power_shutdown()
-        self.assertEqual(0xd5, ret)
+        self.assertEqual(0xC0, ret)
         mock_libvirt_domain.return_value.shutdown.assert_not_called()
         self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)
 
@@ -223,6 +256,6 @@ class VirtualBMCTestCase(base.TestCase):
     def test_power_on_error(self, mock_libvirt_domain, mock_libvirt_open):
         mock_libvirt_domain.side_effect = libvirt.libvirtError('boom')
         ret = self.vbmc.power_on()
-        self.assertEqual(0xd5, ret)
+        self.assertEqual(0xC0, ret)
         self.assertFalse(mock_libvirt_domain.return_value.create.called)
         self._assert_libvirt_calls(mock_libvirt_domain, mock_libvirt_open)

@@ -28,10 +28,14 @@ cover
 .tox
 nosetests.xml
 .testrepository
+.stestr
 .venv
 
 # Translations
 *.mo
+
+# Files created by releasenotes build
+releasenotes/build
 
 # Mr Developer
 .mr.developer.cfg

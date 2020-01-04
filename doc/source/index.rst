@@ -6,20 +6,20 @@
 Welcome to VirtualBMC's documentation!
 ======================================
 
+The VirtualBMC tool simulates a
+`Baseboard Management Controller <https://en.wikipedia.org/wiki/Intelligent_Platform_Management_Interface#Baseboard_management_controller>`_
+(BMC) by exposing
+`IPMI <https://en.wikipedia.org/wiki/Intelligent_Platform_Management_Interface>`_
+responder to the network and talking to
+`libvirt <https://en.wikipedia.org/wiki/Libvirt>`_
+at the host vBMC is running at to manipulate virtual machines which pretend
+to be bare metal servers.
+
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
-   readme
-   installation
-   usage
-   contributing
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-
+   install/index
+   user/index
+   contributor/index
