@@ -15,6 +15,7 @@ import errno
 import multiprocessing
 import os
 import shutil
+import signal
 
 from virtualbmc import config as vbmc_config
 from virtualbmc import exception
@@ -27,6 +28,7 @@ LOG = log.get_logger()
 # BMC status
 RUNNING = 'running'
 DOWN = 'down'
+ERROR = 'error'
 
 DEFAULT_SECTION = 'VirtualBMC'
 
@@ -95,8 +97,8 @@ class VirtualBMCManager(object):
         except Exception:
             currently_enabled = False
 
-        if (lets_enable is not None and
-                lets_enable != currently_enabled):
+        if (lets_enable is not None
+                and lets_enable != currently_enabled):
             config.update(active=lets_enable)
             self._store_config(**config)
             currently_enabled = lets_enable
@@ -112,6 +114,9 @@ class VirtualBMCManager(object):
         """
 
         def vbmc_runner(bmc_config):
+            # The manager process installs a signal handler for SIGTERM to
+            # propagate it to children. Return to the default handler.
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
             show_passwords = CONF['default']['show_passwords']
 
@@ -124,7 +129,7 @@ class VirtualBMCManager(object):
                 vbmc = VirtualBMC(**bmc_config)
 
             except Exception as ex:
-                LOG.error(
+                LOG.exception(
                     'Error running vBMC with configuration '
                     '%(opts)s: %(error)s', {'opts': show_options,
                                             'error': ex}
@@ -135,7 +140,7 @@ class VirtualBMCManager(object):
                 vbmc.listen(timeout=CONF['ipmi']['session_timeout'])
 
             except Exception as ex:
-                LOG.info(
+                LOG.exception(
                     'Shutdown vBMC for domain %(domain)s, cause '
                     '%(error)s', {'domain': show_options['domain_name'],
                                   'error': ex}
@@ -165,7 +170,7 @@ class VirtualBMCManager(object):
 
             if lets_enable:
 
-                if not instance:
+                if not instance or not instance.is_alive():
 
                     instance = multiprocessing.Process(
                         name='vbmcd-managing-domain-%s' % domain_name,
@@ -183,6 +188,13 @@ class VirtualBMCManager(object):
                         '%(domain)s', {'domain': domain_name}
                     )
 
+                if not instance.is_alive():
+                    LOG.debug(
+                        'Found dead vBMC instance for domain %(domain)s '
+                        '(rc %(rc)s)', {'domain': domain_name,
+                                        'rc': instance.exitcode}
+                    )
+
             else:
                 if instance:
                     if instance.is_alive():
@@ -192,13 +204,7 @@ class VirtualBMCManager(object):
                             '%(domain)s', {'domain': domain_name}
                         )
 
-            if instance and not instance.is_alive():
-                del self._running_domains[domain_name]
-                LOG.debug(
-                    'Reaped vBMC instance for domain %(domain)s '
-                    '(rc %(rc)s)', {'domain': domain_name,
-                                    'rc': instance.exitcode}
-                )
+                    self._running_domains.pop(domain_name, None)
 
     def _show(self, domain_name):
         bmc_config = self._parse_config(domain_name)
@@ -214,6 +220,8 @@ class VirtualBMCManager(object):
 
         if instance and instance.is_alive():
             show_options['status'] = RUNNING
+        elif instance and not instance.is_alive():
+            show_options['status'] = ERROR
         else:
             show_options['status'] = DOWN
 
@@ -299,6 +307,7 @@ class VirtualBMCManager(object):
                                lets_enable=True)
 
         except Exception as e:
+            LOG.exception('Failed to start domain %s', domain_name)
             return 1, ('Failed to start domain %(domain)s. Error: '
                        '%(error)s' % {'domain': domain_name, 'error': e})
 
@@ -311,6 +320,7 @@ class VirtualBMCManager(object):
             self._vbmc_enabled(domain_name, lets_enable=False)
 
         except Exception as ex:
+            LOG.exception('Failed to stop domain %s', domain_name)
             return 1, str(ex)
 
         self._sync_vbmc_states()

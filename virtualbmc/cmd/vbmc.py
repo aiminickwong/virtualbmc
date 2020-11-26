@@ -12,19 +12,15 @@
 
 import json
 import logging
-import os
 import sys
-import time
 
 from cliff.app import App
 from cliff.command import Command
 from cliff.commandmanager import CommandManager
 from cliff.lister import Lister
-
 import zmq
 
 import virtualbmc
-from virtualbmc.cmd import vbmcd
 from virtualbmc import config as vbmc_config
 from virtualbmc.exception import VirtualBMCError
 from virtualbmc import log
@@ -78,48 +74,23 @@ class ZmqClient(object):
             poller = zmq.Poller()
             poller.register(socket, zmq.POLLIN)
 
-            while True:
-                try:
-                    if data_out:
-                        socket.send(data_out.encode('utf-8'))
+            try:
+                socket.send(data_out.encode('utf-8'))
 
-                    socks = dict(poller.poll(timeout=self.SERVER_TIMEOUT))
-                    if socket in socks and socks[socket] == zmq.POLLIN:
-                        data_in = socket.recv()
-                        break
+                socks = dict(poller.poll(timeout=self.SERVER_TIMEOUT))
+                if socket in socks and socks[socket] == zmq.POLLIN:
+                    data_in = socket.recv()
 
+                else:
                     raise zmq.ZMQError(
                         zmq.RCVTIMEO, msg='Server response timed out')
 
-                except zmq.ZMQError as ex:
-                    LOG.debug('Server at %(port)s connection error: '
-                              '%(error)s', {'port': server_port, 'error': ex})
-
-                    if no_daemon:
-                        msg = ('Server at %(port)s may be dead, will not '
-                               'try to revive it' % {'port': server_port})
-                        LOG.error(msg)
-                        raise VirtualBMCError(msg)
-
-                no_daemon = True
-
-                LOG.debug("Attempting to start `vbmcd` behind the "
-                          "scenes. Consider configuring your system to "
-                          "manage `vbmcd` via systemd. Automatic "
-                          "`vbmcd` start up will be removed in the "
-                          "future releases!")
-
-                # attempt to start and daemonize the server
-                if os.fork() == 0:
-                    # this will also fork and detach properly
-                    vbmcd.main([])
-
-                # TODO(etingof): perform some more retries
-                time.sleep(CONF['default']['server_spawn_wait'] / 1000.)
-
-                # MQ will deliver the original message to the daemon
-                # we've started
-                data_out = {}
+            except zmq.ZMQError as ex:
+                msg = ('Failed to connect to the vbmcd server on port '
+                       '%(port)s, error: %(error)s' % {'port': server_port,
+                                                       'error': ex})
+                LOG.error(msg)
+                raise VirtualBMCError(msg)
 
         finally:
             if socket:

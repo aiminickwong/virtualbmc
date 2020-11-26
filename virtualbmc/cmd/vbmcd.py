@@ -10,8 +10,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from __future__ import print_function
-
 import argparse
 import os
 import sys
@@ -85,9 +83,14 @@ def main(argv=sys.argv[1:]):
 
     if args.foreground:
         return wrap_with_pidfile(control.application, os.getpid())
+
     else:
         with utils.detach_process() as pid:
+            if pid > 0:
+                return 0
+
             return wrap_with_pidfile(control.application, pid)
+
 
 if __name__ == '__main__':
     sys.exit(main())

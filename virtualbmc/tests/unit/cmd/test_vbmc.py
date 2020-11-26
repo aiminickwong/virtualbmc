@@ -15,8 +15,8 @@
 
 import io
 import json
-import mock
 import sys
+from unittest import mock
 
 import zmq
 
@@ -36,8 +36,9 @@ class VBMCTestCase(base.TestCase):
     @mock.patch.object(zmq, 'Poller')
     def test_server_timeout(self, mock_zmq_poller, mock_zmq_context):
         expected_rc = 1
-        expected_output = ('Server at 50891 may be dead, '
-                           'will not try to revive it\n')
+        expected_output = (
+            'Failed to connect to the vbmcd server on port 50891, error: '
+            'Server response timed out\n')
 
         mock_zmq_poller = mock_zmq_poller.return_value
         mock_zmq_poller.poll.return_value = {}
